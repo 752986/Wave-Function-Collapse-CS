@@ -1,39 +1,69 @@
 namespace wave_function_collapse;
 
-class WaveMap<State> where State : WaveMap<State>.Tile {
-    public Tile[,] Board;
+class WaveMap<State> {
+    public List<State>[,] Board;
 
-    public interface Tile {}
+    private Func<List<State>[,], (int, int), List<State>> getValidStates;
+    private Func<List<State>[,], bool> isBoardValid;
 
-    private struct UncollapsedTile : Tile {
-        public required List<State> ValidStates;
+    public WaveMap(
+        (int width, int height) dimensions, 
+        Func<List<State>[,], (int, int), List<State>> getValidStates, 
+        Func<List<State>[,], bool> isBoardValid = null
+    )
+    {
+        this.getValidStates = getValidStates;
+        this.isBoardValid = isBoardValid;
+
+        Board = new List<State>[dimensions.width, dimensions.height];
+
+        for (int x = 0; x < dimensions.width; x++) {
+            for (int y = 0; y < dimensions.width; y++) {
+                Board[x, y] = new List<State>();
+            }
+        }
+
+        for (int x = 0; x < dimensions.width; x++) {
+            for (int y = 0; y < dimensions.width; y++) {
+                Board[x, y] = getValidStates(Board, (x, y));
+            }
+        }
+
+        Random rng = new();
+        (int x, int y) seedPoint = (rng.Next(dimensions.width), rng.Next(dimensions.height));
+        List<State> slot = (Board[seedPoint.x, seedPoint.y]);
+        Board[seedPoint.x, seedPoint.y] = new List<State>() {slot[rng.Next(slot.Count)]};
     }
 
     private bool hasCollapsed() {
-        foreach (Tile space in Board) {
-            if (space is UncollapsedTile) {
+        foreach (var space in Board) {
+            if (space.Count != 1) {
                 return false;
             }
         }
         return true;
     }
 
-    public void Collapse(Func<Tile[,], (int, int), List<State>> getValidStates, Func<Tile[,], bool> isBoardValid) {
+    public void Collapse(bool printDebug = false) {
+        int iterations = 0;
+        do {
+            if (printDebug) {
+                Console.WriteLine("Beginning attempt ", iterations);
+            }
 
-        while (!hasCollapsed()) {
-            for (int i = 0; i < Board.Length; i++) {
+            while (!hasCollapsed()) {
                 int stride = Board.GetLength(0);
-                (int x, int y) pos = (i % stride, i / stride);
+                for (int i = 0; i < Board.Length; i++) {
+                    (int x, int y) pos = (i % stride, i / stride);
 
-                List<State> result = getValidStates(Board, pos);
-
-                if (result.Count > 1) {
-                    Board[pos.x, pos.y] = result[0];
-                } else {
-                    Board[pos.x, pos.y] = new UncollapsedTile() {ValidStates = result};
+                    Board[pos.x, pos.y] = getValidStates(Board, pos);
                 }
             }
-        }
+
+            if (isBoardValid == null) {return;}
+
+            iterations++;
+        } while (!isBoardValid(Board));
     }
 
 }
